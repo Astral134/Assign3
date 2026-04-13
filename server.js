@@ -9,12 +9,10 @@ const userService = require("./user-service");
 dotenv.config();
 
 const app = express();
-const HTTP_PORT = process.env.PORT || 8080;
 
 const JwtStrategy = passportJWT.Strategy;
 const ExtractJwt = passportJWT.ExtractJwt;
 
-// Passport JWT Strategy setup
 const jwtOptions = {
   jwtFromRequest: ExtractJwt.fromAuthHeaderWithScheme("jwt"),
   secretOrKey: process.env.JWT_SECRET,
@@ -37,9 +35,19 @@ app.use(express.json());
 app.use(cors());
 app.use(passport.initialize());
 
+// Middleware to ensure DB is connected before handling any request
+app.use((req, res, next) => {
+  userService
+    .connect()
+    .then(() => next())
+    .catch((err) => {
+      console.error("MongoDB connection error:", err);
+      res.status(500).json({ message: "Database connection failed" });
+    });
+});
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-// Register a new user
 app.post("/api/user/register", (req, res) => {
   userService
     .registerUser(req.body)
@@ -47,7 +55,6 @@ app.post("/api/user/register", (req, res) => {
     .catch((msg) => res.status(422).json({ message: msg }));
 });
 
-// Login — returns a signed JWT
 app.post("/api/user/login", (req, res) => {
   userService
     .checkUser(req.body)
@@ -56,9 +63,7 @@ app.post("/api/user/login", (req, res) => {
         _id: user._id,
         userName: user.userName,
       };
-
       const token = jwt.sign(payload, process.env.JWT_SECRET);
-
       res.json({ message: "login successful", token: token });
     })
     .catch((msg) => {
@@ -66,7 +71,6 @@ app.post("/api/user/login", (req, res) => {
     });
 });
 
-// Get favourites — protected
 app.get(
   "/api/user/favourites",
   passport.authenticate("jwt", { session: false }),
@@ -78,7 +82,6 @@ app.get(
   }
 );
 
-// Add to favourites — protected
 app.put(
   "/api/user/favourites/:id",
   passport.authenticate("jwt", { session: false }),
@@ -90,7 +93,6 @@ app.put(
   }
 );
 
-// Remove from favourites — protected
 app.delete(
   "/api/user/favourites/:id",
   passport.authenticate("jwt", { session: false }),
@@ -102,10 +104,4 @@ app.delete(
   }
 );
 
-// Connect to MongoDB once on cold start
-userService.connect().catch((err) => {
-  console.log(`Unable to connect to MongoDB: ${err}`);
-});
-
-// ─── Export for Vercel (no app.listen) ────────────────────────────────────────
 module.exports = app;
