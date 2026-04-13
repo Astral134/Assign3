@@ -102,15 +102,10 @@ app.delete(
   }
 );
 
-// ─── Start server ─────────────────────────────────────────────────────────────
-userService
-  .connect()
-  .then(() => {
-    app.listen(HTTP_PORT, () =>
-      console.log(`API listening on port: ${HTTP_PORT}`)
-    );
-  })
-  .catch((err) => {
-    console.log(`Unable to start the server: ${err}`);
-    process.exit();
-  });
+// Connect to MongoDB once on cold start
+userService.connect().catch((err) => {
+  console.log(`Unable to connect to MongoDB: ${err}`);
+});
+
+// ─── Export for Vercel (no app.listen) ────────────────────────────────────────
+module.exports = app;
