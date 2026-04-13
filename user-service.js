@@ -15,16 +15,28 @@ let userSchema = new Schema({
 });
 
 let User;
+let cachedDb = null;
 
 module.exports.connect = function () {
     return new Promise(function (resolve, reject) {
-        let db = mongoose.createConnection(mongoDBConnectionString);
+
+        // If already connected, reuse the connection
+        if (cachedDb && cachedDb.readyState === 1) {
+            resolve();
+            return;
+        }
+
+        let db = mongoose.createConnection(mongoDBConnectionString, {
+            serverSelectionTimeoutMS: 5000
+        });
 
         db.on('error', err => {
+            cachedDb = null;
             reject(err);
         });
 
         db.once('open', () => {
+            cachedDb = db;
             User = db.model("users", userSchema);
             resolve();
         });
@@ -45,14 +57,14 @@ module.exports.registerUser = function (userData) {
                 let newUser = new User(userData);
 
                 newUser.save().then(() => {
-                    resolve("User " + userData.userName + " successfully registered");  
+                    resolve("User " + userData.userName + " successfully registered");
                 }).catch(err => {
                     if (err.code == 11000) {
                         reject("User Name already taken");
                     } else {
                         reject("There was an error creating the user: " + err);
                     }
-                })
+                });
             }).catch(err => reject(err));
         }
     });
@@ -64,6 +76,10 @@ module.exports.checkUser = function (userData) {
         User.findOne({ userName: userData.userName })
             .exec()
             .then(user => {
+                if (!user) {
+                    reject("Unable to find user " + userData.userName);
+                    return;
+                }
                 bcrypt.compare(userData.password, user.password).then(res => {
                     if (res === true) {
                         resolve(user);
@@ -83,15 +99,14 @@ module.exports.getFavourites = function (id) {
         User.findById(id)
             .exec()
             .then(user => {
-                resolve(user.favourites)
+                resolve(user.favourites);
             }).catch(err => {
                 reject(`Unable to get favourites for user with id: ${id}`);
             });
     });
-}
+};
 
 module.exports.addFavourite = function (id, favId) {
-
     return new Promise(function (resolve, reject) {
 
         User.findById(id).exec().then(user => {
@@ -101,17 +116,13 @@ module.exports.addFavourite = function (id, favId) {
                     { new: true }
                 ).exec()
                     .then(user => { resolve(user.favourites); })
-                    .catch(err => { reject(`Unable to update favourites for user with id: ${id}`); })
+                    .catch(err => { reject(`Unable to update favourites for user with id: ${id}`); });
             } else {
                 reject(`Unable to update favourites for user with id: ${id}`);
             }
-
-        })
-
+        });
     });
-
-
-}
+};
 
 module.exports.removeFavourite = function (id, favId) {
     return new Promise(function (resolve, reject) {
@@ -124,6 +135,6 @@ module.exports.removeFavourite = function (id, favId) {
             })
             .catch(err => {
                 reject(`Unable to update favourites for user with id: ${id}`);
-            })
+            });
     });
-}
+};
